@@ -2,6 +2,7 @@ import os
 import math
 import numpy as np
 from scipy.io import loadmat
+import pandas as pd
 
 chrom_sizes = [249250621,243199373,198022430,191154276,180915260,171115067,159138663,146364022,
 141213431,135534747,135006516,133851895,115169878,107349540,102531392,90354753,81195210,78077248,
@@ -207,3 +208,48 @@ def SNIPER_output_to_wigfix(data_path, index_path, wigfix_dir_path, resolution):
                 break
     for l in range(num_LV):
         LV[l].close()
+
+
+# This function make dump_dir and save intrachromosomal matrices from hic_file in it
+def hicToIntraMat(hic_path, dump_dir, resolution, juicer_path):
+    try:
+		os.stat(dump_dir)
+	except:
+		os.mkdir(dump_dir)
+    for chr_num in range(1,23):
+        output_path = os.path.join(dump_dir, 'chrom{0}.txt'.format(chr_num))
+        if (!os.path.isfile(output_path)):
+            cmd = 'java -jar {0} dump observed KR {1} {2} {2} BP {3} {4} > tmp_juicer_log'.format(juicer_path,hic_path,chr_num,resolution,output_path)
+            call([cmd], shell = True)
+
+def hicToCorrIntraMat(hic_path, dump_dir, resolution, juicer_path):
+    try:
+		os.stat(dump_dir)
+	except:
+		os.mkdir(dump_dir)
+    for chr_num in range(1,23):
+        output_path = os.path.join(dump_dir, 'corr_chrom{0}.txt'.format(chr_num))
+        if (!os.path.isfile(output_path)):
+            coo_path = os.path.join(dump_dir, 'chrom{0}.txt'.format(chr_num))
+            cmd = 'java -jar {0} dump observed KR {1} {2} {2} BP {3} {4} > tmp_juicer_log'.format(juicer_path,hic_path,chr_num,resolution,coo_path)
+            call([cmd], shell = True)
+            coo = pd.read_csv(coo_path, header = None, sep = "\t")
+            coo.columns = ['source', 'target', 'weight']
+            coo[['source','target']] = coo[['source','target']] / resolution
+            expected_contacts = coo.groupby(abs(coo['target']-coo['source']), as_index=True).sum()
+            chr_vir_size = chrom_sizes[chr_num-1]/resolution
+            expected_contacts['weight'] = expected_contacts['weight'] / (chr_vir_size-expected_contacts.index.to_series())
+            coo['weight'] = coo['weight'] / expected_contacts.loc[abs(coo['target']-coo['source']),'weight'].values
+            OtoE_path = os.path.join(dump_dir, 'chrom{0}_OtoE.txt'.format(chr_num))
+            coo.to_csv(OtoE_path, header=None, index=None, sep=' ', mode='a')
+            coo_matrix = np.zeros(shape=(chr_vir_size,chr_vir_size), dtype=float)
+            weight_list = coo['weight'].ravel()
+            weight_list[np.isnan(weight_list)] = 0
+            coo_matrix[coo['source'].ravel().astype(int)-1,coo['target'].ravel().astype(int)-1] = weight_list
+            coo_matrix = coo_matrix + coo_matrix.T - np.diag(np.diag(coo_matrix))
+            corr_matrix = np.corrcoef(coo_matrix)
+            corr_matrix = pd.DataFrame(corr_matrix)
+            corr_coo = corr_matrix.rename_axis('source').reset_index().melt('source', value_name='weight', var_name='target').dropna()
+            corr_coo.to_csv(output_path, header=None, index=None, sep=' ', mode='a')
+            #os.remove(coo_path)
+#def enrichment_values(annotation_bed_file, signal_track_files, annot_vir_res, signal_tracks_res):
