@@ -33,17 +33,17 @@ def bedpe_to_coo(bedpe_file, res, id_dict, output):
     with open(bedpe_file, "r") as bedpe:
         for line in bedpe:
             chr1, start1, end1, chr2, start2, end2, value = line.split()
-            if chr1 != chr2:
-                first_id = id_dict[(chr1, int(int(start1)/res))]
-                second_id = id_dict[(chr2, int(int(start2)/res))]
-                f.write(str(first_id) + "\t" + str(second_id) + "\t" + value + "\n")
+            first_id = id_dict[(chr1, int(int(start1)/res))]
+            second_id = id_dict[(chr2, int(int(start2)/res))]
+            f.write(str(first_id) + "\t" + str(second_id) + "\t" + value + "\n")
+            if first_id != second_id:
                 f.write(str(second_id) + "\t" + str(first_id) + "\t" + value + "\n")
     f.close()
 
 
 def main():
 
-    parser = argparse.ArgumentParser(description='lift bedpe file to other assembly')
+    parser = argparse.ArgumentParser(description='convert bedpe file to coo file as a LINE input file')
     parser.add_argument('-i', "--bedpe_file_path", required = True,
                        help='Path of Hi-C bedpe file')
     parser.add_argument('-s', '--chrom_size', required = True,
